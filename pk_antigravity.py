@@ -7,6 +7,7 @@ from PIL import Image
 import io
 import datetime
 import os
+import streamlit.components.v1 as components
 
 
 # Force sidebar to be expanded
@@ -14,16 +15,7 @@ st.set_page_config(
     page_title="MorphoVision Pro",
     page_icon="🔬",
     layout="wide",
-    initial_sidebar_state="expanded"  # This forces sidebar to always show
-)
-
-
-# ---------- PAGE CONFIG ----------
-st.set_page_config(
-    page_title="MorphoVision Pro",
-    page_icon="🔬",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded"  
 )
 
 # ---------- 🎨 BEAUTIFUL GRADIENT CSS ----------
@@ -261,6 +253,210 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ---------- 🎨 DANDELION INTERACTIVE COMPONENT ----------
+def render_dandelion():
+    dandelion_html = """
+    <style>
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        
+        #themeBtn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 35px;
+            height: 35px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(201, 168, 76, 0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+        #themeBtn:hover { background: rgba(201, 168, 76, 0.2); }
+        #themeBtn svg { width: 20px; height: 20px; fill: #c9a84c; }
+        
+        /* Effects to blend */
+        .float-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+            z-index: -1;
+            pointer-events: none;
+        }
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(201, 168, 76, 0.3);
+            animation: floatUp 10s infinite ease-in-out;
+        }
+        
+        @keyframes floatUp {
+            0% { transform: translateY(100vh) scale(0); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(-100px) scale(1); opacity: 0; }
+        }
+        
+        .glow-blob {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(201, 168, 76, 0.15) 0%, rgba(255,255,255,0) 70%);
+            top: -50px;
+            right: -50px;
+            border-radius: 50%;
+            filter: blur(50px);
+            z-index: -1;
+            pointer-events: none;
+            animation: pulse 4s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.4; transform: scale(0.8); }
+            100% { opacity: 0.8; transform: scale(1.2); }
+        }
+    </style>
+    
+    <div id="themeBtn" title="Change Theme (Gold, Purple, Cyan)">
+        <svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zm0 2c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0-7c-.34 0-.67.02-1 .06C9.73 2.58 9 3.63 9 5v1.06c-3.12.92-5.5 3.76-5.94 7.19C2.5 18.09 6.03 22 12 22s9.5-3.91 8.94-8.75c-.44-3.43-2.82-6.27-5.94-7.19V5c0-1.37-.73-2.42-2-2.94-.33-.04-.66-.06-1-.06z"/></svg>
+    </div>
+    
+    <div class="glow-blob"></div>
+    <div class="float-particles" id="particles"></div>
+    <canvas id="canvas"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+        
+        // Themes matching the app's color palette
+        const themes = [
+            { name: 'Gold', lineColor: 'rgba(201, 168, 76, 0.6)', dotColor: 'rgba(245, 211, 124, 1)', centerGlow: 'rgba(201, 168, 76, 0.4)' },
+            { name: 'Purple', lineColor: 'rgba(167, 139, 250, 0.6)', dotColor: 'rgba(167, 139, 250, 1)', centerGlow: 'rgba(167, 139, 250, 0.4)' },
+            { name: 'Cyan', lineColor: 'rgba(96, 165, 250, 0.6)', dotColor: 'rgba(96, 165, 250, 1)', centerGlow: 'rgba(96, 165, 250, 0.4)' }
+        ];
+        let currentThemeIndex = 0;
+        let theme = themes[currentThemeIndex];
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            initLines();
+        });
+
+        let mouse = { x: width / 2, y: height / 2 };
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+        });
+
+        let lines = [];
+        const originX = () => width / 2;
+        const originY = () => height * 0.9;
+
+        function initLines() {
+            lines = [];
+            const count = 120;
+            for (let i = 0; i < count; i++) {
+                lines.push({
+                    angle: (Math.PI * 2) * (i / count) + (Math.random() * 0.1),
+                    baseAngle: 0,
+                    length: 100 + Math.random() * 250, // Shorter lines
+                    sway: Math.random() * Math.PI * 2,
+                    dotRadius: 2 + Math.random() * 2
+                });
+                lines[i].baseAngle = lines[i].angle;
+            }
+        }
+
+        function drawBackground() {
+            // Clear canvas to transparent
+            ctx.clearRect(0, 0, width, height);
+            // Center glow
+            const glow = ctx.createRadialGradient(originX(), originY(), 0, originX(), originY(), 300);
+            glow.addColorStop(0, theme.centerGlow);
+            glow.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        function animate() {
+            drawBackground();
+            ctx.lineWidth = 1;
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
+
+                let dotX = originX() + Math.cos(line.angle) * line.length;
+                let dotY = originY() + Math.sin(line.angle) * line.length;
+                let dx = mouse.x - dotX;
+                let dy = mouse.y - dotY;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Subtle repellent effect
+                if (dist < 80) {
+                    let force = (80 - dist) / 80; 
+                    let angleToMouse = Math.atan2(dy, dx);
+                    line.angle += Math.cos(angleToMouse) * force * 0.03;
+                } else {
+                    line.angle += (line.baseAngle - line.angle) * 0.02;
+                }
+
+                line.angle += Math.sin(Date.now() * 0.001 + line.sway) * 0.001;
+
+                ctx.strokeStyle = theme.lineColor;
+                ctx.beginPath();
+                ctx.moveTo(originX(), originY());
+                ctx.lineTo(dotX, dotY);
+                ctx.stroke();
+
+                ctx.fillStyle = theme.dotColor;
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, line.dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            requestAnimationFrame(animate);
+        }
+
+        document.getElementById('themeBtn').addEventListener('click', () => {
+            currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+            theme = themes[currentThemeIndex];
+            const icon = document.querySelector('#themeBtn svg');
+            icon.style.fill = theme.dotColor;
+        });
+
+        // Generate floating particles
+        const particlesContainer = document.getElementById('particles');
+        for (let i = 0; i < 20; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            const size = Math.random() * 4 + 2;
+            particle.style.width = size + 'px';
+            particle.style.height = size + 'px';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 10 + 's';
+            particle.style.animationDuration = (Math.random() * 10 + 10) + 's';
+            particlesContainer.appendChild(particle);
+        }
+
+        initLines();
+        animate();
+    </script>
+    """
+    # Height is set to 350px for a subtle effect
+    components.html(dandelion_html, height=350)
+
+# Call the Dandelion component (Small and Blended)
+render_dandelion()
 
 # ---------- HEADER ----------
 st.markdown("""
