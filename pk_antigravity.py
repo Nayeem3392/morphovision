@@ -8,6 +8,16 @@ import io
 import datetime
 import os
 
+
+# Force sidebar to be expanded
+st.set_page_config(
+    page_title="MorphoVision Pro",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded"  # This forces sidebar to always show
+)
+
+
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="MorphoVision Pro",
@@ -22,7 +32,6 @@ st.markdown("""
     /* Hide Streamlit junk */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     .stDeployButton {display: none;}
     
     /* ========== MAIN BACKGROUND - WARM GRADIENT ========== */
@@ -314,10 +323,25 @@ def median_benchmark(image, ksize):
     return cv2.medianBlur(image, ksize)
 
 def calculate_metrics(original, processed):
-    mse = np.mean((original.astype(float) - processed.astype(float)) ** 2)
-    psnr = 20 * np.log10(255.0 / np.sqrt(mse)) if mse > 0 else float('inf')
-    ssim = np.corrcoef(original.flatten(), processed.flatten())[0, 1]
-    return round(psnr, 2), round(ssim, 4)
+    original = original.astype(np.float32)
+    processed = processed.astype(np.float32)
+
+    mse = np.mean((original - processed) ** 2)
+    psnr = 100.0 if mse == 0 else 20 * np.log10(255.0 / np.sqrt(mse))
+
+    orig_flat = original.flatten()
+    proc_flat = processed.flatten()
+
+    if np.allclose(orig_flat, proc_flat):
+        ssim = 1.0
+    else:
+        orig_mean = orig_flat.mean()
+        proc_mean = proc_flat.mean()
+        numerator = np.sum((orig_flat - orig_mean) * (proc_flat - proc_mean))
+        denom = np.sqrt(np.sum((orig_flat - orig_mean) ** 2) * np.sum((proc_flat - proc_mean) ** 2))
+        ssim = numerator / denom if denom > 0 else 0.0
+
+    return round(psnr, 2), round(float(ssim), 4)
 
 def edge_preservation(original, processed):
     edges_orig = cv2.Canny(original, 50, 150)
@@ -514,30 +538,48 @@ if uploaded is not None and process_btn:
                 os.remove(path)
 
 # ---------- WEBCAM ----------
+# ============================================================
+# 📷 WEBCAM - BROWSER BASED (Works for everyone!)
+# ============================================================
 if use_webcam:
     st.divider()
     st.markdown("""
     <div style="background: rgba(255,255,255,0.02); border-radius: 20px; padding: 30px; border: 1px solid rgba(255,255,255,0.04);">
-        <h3 style="color: #ffffff; font-weight: 600; margin-bottom: 10px;">📹 Live Webcam Processing</h3>
-        <p style="color: #6b7a8f; font-weight: 300; margin-bottom: 20px;">Real-time denoising with morphological filtering</p>
+        <h3 style="color: #ffffff; font-weight: 600; margin-bottom: 10px;">📹 Live Webcam Capture</h3>
+        <p style="color: #6b7a8f; font-weight: 300; margin-bottom: 20px;">
+            Click the button below. Your browser will ask for camera permission. 
+            Accept it, and the app will denoise your picture instantly!
+        </p>
     """, unsafe_allow_html=True)
     
-    if st.button("▶️ Start Webcam"):
-        cap = cv2.VideoCapture(0)
-        frame_place = st.empty()
-        stop = st.button("⏹️ Stop")
-        while not stop:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            noisy_f = add_noise(gray, 0.05)
-            clean_f = morphological_clean(noisy_f, 3, "Rectangle")
-            combined = np.hstack([gray, noisy_f, clean_f])
-            frame_place.image(combined, caption="Original  |  Noisy  |  Denoised", use_container_width=True, clamp=True)
-            time.sleep(0.03)
-        cap.release()
-        frame_place.empty()
+    # --- THE MAGIC BUTTON: This works on ANY device (Phone, PC, Tablet) ---
+    camera_photo = st.camera_input("📸 Take a Photo")
+    
+    if camera_photo is not None:
+        # Read the image taken by the user's browser
+        bytes_data = camera_photo.getvalue()
+        nparr = np.frombuffer(bytes_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
+        
+        # Show the "Processing" status
+        status = st.empty()
+        status.info("🔄 Denoising your photo with Morphological Filter...")
+        time.sleep(0.5)
+        
+        # Apply the morphological filter (Use current settings or default)
+        # Note: We use a default kernel of 3 for speed, but you can link it to your sidebar slider if you want!
+        processed = morphological_clean(img, ksize=3, shape_choice="Rectangle")
+        
+        status.success("✅ Denoising complete!")
+        time.sleep(0.5)
+        status.empty()
+        
+        # Display the result side by side
+        col1, col2 = st.columns(2)
+        with col1:
+            st.image(img, caption="📸 Original Selfie", use_container_width=True, clamp=True)
+        with col2:
+            st.image(processed, caption="🧹 Denoised Selfie", use_container_width=True, clamp=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
